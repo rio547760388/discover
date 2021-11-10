@@ -1,0 +1,27 @@
+spring:
+  profiles:
+    active: dev
+  mail:
+    host: smtp.office365.com
+    port: 587
+    protocol: smtp
+    username: administrator@pacypay.com
+    password: UJ2ipuM87D5HEqiw
+    properties:
+      mail:
+        smtp:
+          socketFactory:
+            fallback: true
+            class: "javax.net.ssl.SSLSocketFactory"
+          starttls:
+            enable: true
+
+server:
+  servlet:
+    context-path: /api
+  port: 9900
+logging:
+  file:
+    name: log.txt
+    max-history: 30
+    max-size: 30MB

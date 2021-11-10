@@ -1,0 +1,3 @@
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+com.ronhan.iso8583.discover.Iso8583AutoConfiguration,\
+com.ronhan.config.RabbitConfig

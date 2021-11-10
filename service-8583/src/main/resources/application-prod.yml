@@ -1,0 +1,101 @@
+discover:
+  iic: "00000367561"
+  iic_dc: "00000361589"
+  dxs_code: "D6"
+  #Indicates the country in which the  acquirer of the charge detail is located per ISO Standard 3166
+  aqgeo: "156"
+  dRate: "0"
+  settleCur: "USD"
+  env: "PRD"
+  generator:
+    pre: 2
+  exchange: exchange.iso8583
+  queue: discover1
+  scheduler: true
+  sftp:
+    host: 199.38.157.115
+    port: 22
+    username: "D6"
+    pubKey: "MIIBIDANBgkqhkiG9w0BAQEFAAOCAQ0AMIIBCAKCAQEA3F7ZIsKCuaEcPOsToV+A\
+mdCgIEYjYoLcFtqQBffkZ9Fs06it02g41vgzXjQuEk6y5NqXams7ju+WjZbDC2X3\
+flNGwWe3hxzPpfrKHMGMrrJLi8OR6odjIxmvpZxZ4PNRFkgZBG1CRzXTLGBrKcFp\
+q3nNngQl/863HghfCurcdcpIggxLBTMoN3uWAA+ZZfzBIostI7UNUhls6u54ju99\
+1V9H8MeEHoqPgK4wVVIC5q7aWEeWL7lz3JqBpsbBCalzEAYnVAGTyhx/sakTeUHR\
+IcXASzD2am0VUBQSQrYjtcvQWcdC/aFhy0duahmlxIkfC8PGWtWQjgMgvl4xQnVD\
+iwIBIw=="
+    priKey: "MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDcXtkiwoK5oRw8\
+6xOhX4CZ0KAgRiNigtwW2pAF9+Rn0WzTqK3TaDjW+DNeNC4STrLk2pdqazuO75aN\
+lsMLZfd+U0bBZ7eHHM+l+socwYyuskuLw5Hqh2MjGa+lnFng81EWSBkEbUJHNdMs\
+YGspwWmrec2eBCX/zrceCF8K6tx1ykiCDEsFMyg3e5YAD5ll/MEiiy0jtQ1SGWzq\
+7niO733VX0fwx4Qeio+ArjBVUgLmrtpYR5YvuXPcmoGmxsEJqXMQBidUAZPKHH+x\
+qRN5QdEhxcBLMPZqbRVQFBJCtiO1y9BZx0L9oWHLR25qGaXEiR8Lw8Za1ZCOAyC+\
+XjFCdUOLAgEjAoIBAFHaFiLaiFOTnMYrbbD3liqAsIEEG8WBD+s7PM8ETYWljtJF\
+92vHoBVU3+EpUvDbZwSLtJU9xaoeeb+PxMm4KLnkarzdYWyy7gpzF97LjAZfeyVI\
+o+llfJgCOe0OMAMYi9UTdwGk7LtdIozTWwDhcGRDLx1vQVBiuQsnrkXiNKDGyUxT\
+yxOYfsWFu7RYJ9cnHkdL/uZCVMRgDOFpcv3lQ3wlL67mtJa/3zkVtnbmsgExqRYn\
+koZi37gkR6lrJmXcN3YpimCNscUGn5fYfNFen1dc5Xpz+RnYBrzsiTpYXP4WpoWC\
+CH88BwhJqAJGnOWC2O5FC0rEwtfuYTLYebUk3jsCgYEA+zUh0Jc5n/XrjwsGOcKp\
+XyV64ogLln45gNfiRyXkFAR5uvbuHiz/R1fAxjcE2qGTV/fWxqO/dZjqHoK8vKh8\
+bUpSkDgatzd8GXLwLtynmgqaKoxiD7NerYk5WnsckJFtEucx4Bqi93Z/YZiQ2Sz4\
+tztJDpAf88efmjdI8f1jfukCgYEA4JMcksMQMvKx0oWl4K7WXz0cTZIx9RHxBHkX\
+rQw/tCAyqiL2HUf823uLko9p5pCpgBEZ9kmNVSyJyZb9OooDhCUcXaHL1pPdVhwP\
+lJBMsXq7U02+DPtSpGfAWgMh09q/S+PBJKAhudwBvqQFw7d+5LFyD4tBaM/OCq9r\
+95hzblMCgYEApRRJa9EXPTs0ZVBjLUVn/LI6z2C3KGGTgI3d1vukgi7Tpr+GiNu9\
+soofmDLIrO3V2rjO95AtW+gk0jin6bCMR9HBOjN/RTMXCWjJuGUdrl69FKVlAwDX\
+0R+pWLdNSQ8bypftk0S0PDftTsNX3ywuacffjTojoDK5VradplYOLtMCgYAZqmmq\
+X2+Qy0eFxiGWBVpUBvvrm63wH06+rsDgk6+CTNKXGfA93FdpinZZ5IEhqiIAAfRW\
+qVH7Gwhuz21lxqFQ7kxieOQYhe1o7UOb8zv3BrZSqcyTxPOAgOLIdWLzo/ia9XUo\
+wdf3++LxN1EdrpIow9KFbwApPFIP2YiulRSBowKBgQCxasu5dL8j33adkopzOM7o\
+zpE8MmQ+7hp3pCxaVSnulRW3yLdBXkig2PZ1sbGjMvbhim1G4wDd4ycQ965dd0x/\
+yHLOUMgoi9sKjvmwGvNGPZrzPCeuCh9Dp3rVUbY7SRRPtz2xxXDRPH5HYuBwtR28\
+JMc6NI7vo4LFvwSYaE9szQ=="
+  zmk:
+    component1: C8BF16523D9107949ED5EF29942AF892
+    checkValue1: 5DB633
+    component2: D6FD4C649804EF2F235E0D5219681073
+    checkValue2: BA6911
+    component3: 3BCDDA9BD6EAA2ABCE97A783C2FB4608
+    checkValue3: A8375D
+    zmkCheckValue: 40546B
+iso8583:
+  message:
+    host: 10.13.4.4
+    port: 5672
+    username: ENC(ZnmaDRoBCh6EGGgLaCb6eg==)
+    password: ENC(4JQ6GhdCM5RoY9V8Smh1t7kzGlzXlFVj)
+    virtualHost: /discover
+    size: 10
+  connection:
+    enabled: true
+    servers:
+      - host: 199.38.157.21
+        port: 3344
+      - host: 199.38.157.41
+        port: 3344
+spring:
+  datasource:
+    url: jdbc:mysql://10.16.0.10:3306/discoverdb?serverTimezone=UTC&useSSL=false
+    username: ENC(98G9y9UpSOz9eKljuslssg2JiXDDxJgjzNfuLFUaTx/zysHb+1Yf6Q==)
+    password: ENC(4oM/4ws15gXtvwrkT+OQUEs5fLRfeNl/LHRsod6lOl8=)
+    hikari:
+      minimun-idle: 5
+      idle-timeout: 60000
+      maximum-pool-size: 20
+      connection-test-query: select now()
+      max-lifetime: 60000
+  jpa:
+    hibernate.ddl-auto: update
+    show-sql: true
+    properties.hibernate.dialect: org.hibernate.dialect.MySQLDialect
+  redis:
+    database: 10
+    host: 10.13.4.4
+    port: 6379
+    password: ENC(6w4bsveWEfvJp+vpMcKES6lwQX4qEeb4)
+
+jasypt:
+  encryptor:
+    password: s8z9Mbo63ly5ckfz
+
+warn:
+  receiver: jinzhu.tian@pacypay.com,hao.hong@pacypay.com
