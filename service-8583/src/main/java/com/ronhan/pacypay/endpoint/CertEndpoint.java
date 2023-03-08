@@ -3,11 +3,13 @@ package com.ronhan.pacypay.endpoint;
 import com.alibaba.fastjson.JSON;
 import com.ronhan.Country;
 import com.ronhan.Currency;
+import com.ronhan.crypto.Crypto;
 import com.ronhan.iso8583.DateUtils;
 import com.ronhan.iso8583.Message;
 import com.ronhan.iso8583.MessageUtil;
 import com.ronhan.iso8583.Providers;
 import com.ronhan.iso8583.discover.DiscoverMti;
+import com.ronhan.iso8583.discover.KeyExchange;
 import com.ronhan.iso8583.discover.handler.Iso8583Decoder;
 import com.ronhan.iso8583.discover.netty.ServerAddress;
 import com.ronhan.pacypay.parser.MessageParser;
@@ -29,6 +31,7 @@ import io.netty.channel.pool.ChannelPool;
 import io.netty.util.concurrent.Future;
 import io.swagger.annotations.Api;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.codec.DecoderException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +40,8 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
 import java.net.InetSocketAddress;
+import java.security.NoSuchAlgorithmException;
+import java.security.spec.InvalidKeySpecException;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.TimeZone;
@@ -79,9 +84,12 @@ public class CertEndpoint {
     @Autowired
     private TransRecordService transRecordService;
 
+    @Autowired
+    private KeyExchange keyExchange;
+
     @PostMapping("auth")
     public Response<ParsedMessage> auth(@Valid @RequestBody AuthRequest auth, @RequestParam(name = "index") int index) {
-        log.info("auth request: {}", JSON.toJSONString(auth));
+        //log.info("auth request: {}", JSON.toJSONString(auth));
         //convert
         auth.setAcceptorCountry(Country.convertToNum(auth.getAcceptorCountry()));
         auth.setOriginatorCountry(Country.convertToNum(auth.getOriginatorCountry()));
@@ -353,6 +361,17 @@ public class CertEndpoint {
         return response;
     }
 
+    @GetMapping("updateZPK")
+    public Response<String> updateZPK(String stan1, String stan2) {
+        try {
+            keyExchange.update(stan1, stan2);
+            return Response.ok("success");
+        } catch (DecoderException | InvalidKeySpecException | NoSuchAlgorithmException e) {
+            log.error("updateZPK error", e);
+            return Response.error(400, e.getMessage());
+        }
+    }
+
     private IsoMessage toIsoMessage(AuthRequest auth) {
         IsoMessage message = mf.newMessage(DiscoverMti.MTI1100);
         String d1 = DateUtils.format(DateUtils.MMddHHmmss, TimeZone.getTimeZone("UTC"));
@@ -383,12 +402,12 @@ public class CertEndpoint {
         IsoMessage message = mf.newMessage(DiscoverMti.MTI1420);
         String d1 = DateUtils.format(DateUtils.MMddHHmmss, TimeZone.getTimeZone("UTC"));
 
-        message.setField(2, IsoType.LLVAR.value(original.getCardNo()));
+        message.setField(2, IsoType.LLVAR.value(Crypto.decryptCardNo(original.getCardNo())));
         message.setField(3, IsoType.ALPHA.value("200000", 6));
         message.setField(4, IsoType.NUMERIC.value(Currency.format(refund.getAmount(), refund.getCurrency()), 12));
         message.setField(7, IsoType.NUMERIC.value(d1, 10));
         message.setField(12, IsoType.NUMERIC.value(time, 12));
-        message.setField(24, IsoType.NUMERIC.value("1".equals(refund.getFullRefund()) ? 400 : 401, 3));
+        message.setField(24, IsoType.NUMERIC.value(Double.parseDouble(refund.getAmount()) == original.getAmount() ? 400 : 401, 3));
         message.setField(26, IsoType.NUMERIC.value(original.getMcc(), 4));
         message.setField(32, IsoType.LLVAR.value(iic));
         message.setField(33, IsoType.LLVAR.value(iic));
@@ -407,11 +426,11 @@ public class CertEndpoint {
     private TransRecord toTransRecord(AuthRequest request) {
         TransRecord tr = new TransRecord();
         tr.setType(1);
-        tr.setCardNo(request.getCardNo());
+        tr.setCardNo(Crypto.encrypt(request.getCardNo()));
         tr.setAmount(Double.parseDouble(request.getAmount()));
         tr.setCurrency(request.getCurrency());
-        tr.setExpiryMonth(request.getExpiryMonth());
-        tr.setExpiryYear(request.getExpiryYear());
+        tr.setExpiryMonth(Crypto.encrypt(request.getExpiryMonth()));
+        tr.setExpiryYear(Crypto.encrypt(request.getExpiryYear()));
         tr.setMcc(request.getMcc());
         tr.setAcceptorId(request.getAcceptorId());
         tr.setAcceptorName(request.getAcceptorName());

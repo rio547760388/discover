@@ -46,7 +46,7 @@ public class BatchDetail {
     /**
      * field 7
      */
-    @Column(name = "CARD_NO", length = 32)
+    @Column(name = "CARD_NO", length = 64)
     private String cardNo;
 
     /**

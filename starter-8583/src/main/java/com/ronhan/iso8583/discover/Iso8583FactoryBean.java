@@ -71,10 +71,10 @@ public class Iso8583FactoryBean extends AbstractFactoryBean<AbstractChannelPoolM
                 return new FixedChannelPool(bootstrap.remoteAddress(address),
                         new Iso8583PoolHandler(IIC, IIC_DC, mf, publisher),
                         ChannelHealthChecker.ACTIVE,
-                        FixedChannelPool.AcquireTimeoutAction.FAIL,
+                        FixedChannelPool.AcquireTimeoutAction.NEW,
                         5000,
                         properties.getMax(),
-                        3,
+                        properties.getMax(),
                         true,
                         true
                 );

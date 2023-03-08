@@ -13,9 +13,9 @@ import javax.validation.constraints.NotEmpty;
  **/
 @Data
 public class RefundRequest {
-    @ApiModelProperty("0-部分退款，1-全额退款")
-    @NotEmpty(message = "不能为空")
-    private String fullRefund;
+    //@ApiModelProperty("0-部分退款，1-全额退款")
+    //@NotEmpty(message = "不能为空")
+    //private String fullRefund;
 
     @ApiModelProperty("退款金额")
     @NotEmpty(message = "不能为空")

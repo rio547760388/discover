@@ -1,8 +1,10 @@
 package com.ronhan.iso8583.discover.sftp.files;
 
+import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -11,9 +13,48 @@ import java.util.List;
  * <p></p>
  * @since 2021/6/29
  **/
+@Data
 public class DisputeAndFee {
 
+    private FileHeaderRecord headerRecord;
+
+    private List<FeeRecord> feeRecords = new ArrayList<>();
+
+    private List<DisputeRecord> disputeRecords = new ArrayList<>();
+
+    private FileTrailerRecord trailerRecord;
+
+    @Data
+    public static class FeeRecord {
+        private FeeHeaderRecord feeHeaderRecord;
+
+        private List<FeeDetailRecord> feeDetailRecords = new ArrayList<>();
+
+        private FeeTrailerRecord feeTrailerRecord;
+    }
+
+    @Data
+    public static class DisputeRecord {
+        private DisputeHeaderRecord disputeHeaderRecord;
+
+        private List<DisputeRecordPackage> disputeRecordPackages = new ArrayList<>();
+
+        private DisputeTrailerRecord disputeTrailerRecord;
+    }
+
+    @Data
+    public static class DisputeRecordPackage {
+        private DisputeDetailRecord disputeDetailRecord;
+
+        private OriginalInterchangeDetailRecord originalInterchangeDetailRecord;
+    }
+
     public static class FileHeaderRecord {
+
+        public FileHeaderRecord(String data) {
+            this.data = data;
+        }
+
         /**
          * 01
          */
@@ -59,6 +100,10 @@ public class DisputeAndFee {
     }
 
     public static class FeeHeaderRecord {
+        public FeeHeaderRecord(String data) {
+            this.data = data;
+        }
+
         /**
          * 24
          */
@@ -108,6 +153,11 @@ public class DisputeAndFee {
     }
 
     public static class FeeDetailRecord {
+
+        public FeeDetailRecord(String data) {
+            this.data = data;
+        }
+
         /**
          * 26
          */
@@ -233,6 +283,10 @@ public class DisputeAndFee {
         @Getter
         private String data;
 
+        public FeeTrailerRecord(String data) {
+            this.data = data;
+        }
+
         public String getType() {
             return data.substring(0, 2);
         }
@@ -290,6 +344,10 @@ public class DisputeAndFee {
         @Getter
         private String data;
 
+        public DisputeHeaderRecord(String data) {
+            this.data = data;
+        }
+
         public String getType() {
             return data.substring(0, 2);
         }
@@ -338,6 +396,10 @@ public class DisputeAndFee {
         @Setter
         @Getter
         private String data;
+
+        public DisputeDetailRecord(String data) {
+            this.data = data;
+        }
 
         public String getType() {
             return data.substring(0, 2);
@@ -455,6 +517,10 @@ public class DisputeAndFee {
         @Setter
         @Getter
         private String data;
+
+        public OriginalInterchangeDetailRecord(String data) {
+            this.data = data;
+        }
 
         public String getType() {
             return data.substring(0, 2);
@@ -609,6 +675,10 @@ public class DisputeAndFee {
         @Getter
         private String data;
 
+        public DisputeTrailerRecord(String data) {
+            this.data = data;
+        }
+
         public String getType() {
             return data.substring(0, 2);
         }
@@ -670,6 +740,10 @@ public class DisputeAndFee {
         @Getter
         private String data;
 
+        public FileTrailerRecord(String data) {
+            this.data = data;
+        }
+
         public String getType() {
             return data.substring(0, 2);
         }
@@ -715,7 +789,52 @@ public class DisputeAndFee {
             }
             String type = line.substring(0, 2);
 
+            int index = daf.feeRecords.size() - 1;
+
+            int index1 = daf.disputeRecords.size() - 1;
+
+            switch (type) {
+                case "01":
+                    daf.headerRecord = new FileHeaderRecord(line);
+                    break;
+                case "24":
+                    FeeRecord fr = new FeeRecord();
+                    fr.setFeeHeaderRecord(new FeeHeaderRecord(line));
+                    daf.feeRecords.add(fr);
+                    break;
+                case "26":
+                    daf.feeRecords.get(index).feeDetailRecords.add(new FeeDetailRecord(line));
+                    break;
+                case "28":
+                    daf.feeRecords.get(index).setFeeTrailerRecord(new FeeTrailerRecord(line));
+                    break;
+                case "34":
+                    DisputeHeaderRecord disputeHeaderRecord = new DisputeHeaderRecord(line);
+                    DisputeRecord disputeRecord = new DisputeRecord();
+                    disputeRecord.setDisputeHeaderRecord(disputeHeaderRecord);
+                    daf.disputeRecords.add(disputeRecord);
+                    break;
+                case "36":
+                    DisputeRecordPackage disputeRecordPackage = new DisputeRecordPackage();
+                    DisputeDetailRecord disputeDetailRecord = new DisputeDetailRecord(line);
+                    disputeRecordPackage.setDisputeDetailRecord(disputeDetailRecord);
+                    daf.disputeRecords.get(index1).getDisputeRecordPackages().add(disputeRecordPackage);
+                    break;
+                case "38":
+                    OriginalInterchangeDetailRecord originalInterchangeDetailRecord = new OriginalInterchangeDetailRecord(line);
+                    List<DisputeRecordPackage> drp = daf.disputeRecords.get(index1).getDisputeRecordPackages();
+                    drp.get(drp.size() - 1).setOriginalInterchangeDetailRecord(originalInterchangeDetailRecord);
+                    break;
+                case "40":
+                    DisputeTrailerRecord disputeTrailerRecord = new DisputeTrailerRecord(line);
+                    daf.disputeRecords.get(index1).setDisputeTrailerRecord(disputeTrailerRecord);
+                    break;
+                case "99":
+                    FileTrailerRecord fileTrailerRecord = new FileTrailerRecord(line);
+                    daf.trailerRecord = fileTrailerRecord;
+                    break;
+            }
         }
-        return null;
+        return daf;
     }
 }

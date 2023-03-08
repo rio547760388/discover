@@ -1,5 +1,6 @@
 package com.ronhan.iso8583.discover.handler;
 
+import com.ronhan.iso8583.Message;
 import com.ronhan.iso8583.MessageUtil;
 import com.ronhan.iso8583.Providers;
 import com.ronhan.iso8583.discover.DiscoverMti;
@@ -16,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.binary.Hex;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -55,7 +57,18 @@ public class Iso8583Decoder extends ByteToMessageDecoder {
 
         IsoMessage message = mf.parseMessage(buf, 4);
         if (message != null) {
-            log.info("解码消息, data:{}, channel: {}, HEX:{}", MessageUtil.toMap(Providers.DISCOVER, message), ctx.channel(), msg);
+            Message mess = MessageUtil.toMap(Providers.DISCOVER, message);
+            Map<Integer, String> map = mess.getData();
+            if (map.containsKey(2)) {
+                map.put(2, map.get(2).substring(0, 6) + "****" + map.get(2).substring(map.get(2).length() - 4));
+            }
+            if (map.containsKey(14)) {
+                map.put(14, "****");
+            }
+            if (map.containsKey(40)) {
+                map.put(40, "***");
+            }
+            log.info("解码消息, data:{}, channel: {}, HEX:{}", mess, ctx.channel(), msg);
 
             list.add(message);
             if (DiscoverMti.MTI1804 == message.getType()) {

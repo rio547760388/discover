@@ -90,7 +90,7 @@ public class ConfirmationEntity {
     @Column(name = "sequence_num", length = 10)
     private String sequenceNum;
 
-    @Column(name = "card_num", length = 30)
+    @Column(name = "card_num", length = 64)
     private String cardNum;
 
     @Column(name = "charge_date", length = 10)

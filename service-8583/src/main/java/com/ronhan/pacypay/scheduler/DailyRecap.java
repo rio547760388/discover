@@ -4,9 +4,11 @@ import com.google.common.collect.Streams;
 import com.querydsl.core.Tuple;
 import com.ronhan.Currency;
 import com.ronhan.Geocodes;
+import com.ronhan.crypto.Crypto;
 import com.ronhan.iso8583.DoubleUtils;
 import com.ronhan.iso8583.discover.sftp.SftpUtil;
 import com.ronhan.iso8583.discover.sftp.files.Recap;
+import com.ronhan.pacypay.constants.ProgramEnvConstant;
 import com.ronhan.pacypay.pojo.entity.*;
 import com.ronhan.pacypay.service.SettlementService;
 import com.ronhan.pacypay.service.TransRecordService;
@@ -22,6 +24,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.util.CollectionUtils;
 
 import javax.annotation.PostConstruct;
+import javax.validation.constraints.NotBlank;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -33,10 +36,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -71,12 +71,6 @@ public class DailyRecap {
     @Value("${discover.env}")
     private String env;
 
-    @Value("${discover.sftp.pubKey}")
-    private String pub;
-
-    @Value("${discover.sftp.priKey}")
-    private String pri;
-
     @Value("${discover.aqgeo}")
     private String aqgeo;
 
@@ -99,6 +93,66 @@ public class DailyRecap {
 
     @PostConstruct
     public void init() {
+    }
+
+    @Scheduled(cron = "0 0 */8 * * ?")
+    public void consume() {
+        log.info("【下载对账文件】");
+        List<String> files = SftpUtil.readDir(host, port, "DCOUT" + username, Crypto.getPrivateKeyEntry(), "./");
+
+        String dir = ProgramEnvConstant.baseDir;
+        List<String> exists = null;
+        Path path = Paths.get(dir, "INT");
+        Path subDir = path.resolve("load2db");
+        try {
+            File file = path.toFile();
+            if (!file.exists()) {
+                file.mkdirs();
+            }
+
+            if (!subDir.toFile().exists()) {
+                subDir.toFile().mkdirs();
+            }
+            exists = Streams.concat(Files.list(path), Files.list(subDir))
+                    .map(Path::toFile)
+                    .filter(File::isFile)
+                    .map(File::getName)
+                    .collect(Collectors.toList());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        if (files != null) {
+            List<String> finalExists = exists;
+            String outputDir = Paths.get(dir, "INT").toFile().getAbsolutePath();
+            List<String> filesToDownload = files.stream()
+                    .filter(n -> !finalExists.contains(n))
+                    .collect(Collectors.toList());
+            if (!filesToDownload.isEmpty()) {
+                log.info("下载文件：{}", filesToDownload);
+                SftpUtil.download(host, port, "DCOUT" + username, Crypto.getPrivateKeyEntry(), filesToDownload, outputDir);
+            }
+
+            //处理文件
+            try {
+                Files.list(path)
+                        .map(Path::toFile)
+                        .filter(File::isFile)
+                        .map(File::getName)
+                        .filter(f -> f.contains("ACQHO") || f.contains("DFFHO"))
+                        .collect(Collectors.toList())
+                        .forEach(f -> {
+                            try {
+                                settlementService.loadFile(path, f);
+                            } catch (IOException e) {
+                                log.error("", e);
+                            }
+                        });
+            } catch (IOException e) {
+                log.error("", e);
+            }
+
+        }
     }
 
     @Scheduled(cron = "0 0 1 ? * MON-FRI")
@@ -130,7 +184,9 @@ public class DailyRecap {
         log.info("【interchange file 批处理】: {}-{}", start, end);
 
         //load rate
-        loadRate();
+        rateHashMap.clear();
+
+        List<CurrencyConfig> currencyConfigs = settlementService.listCurrencyConfig();
 
         List<Tuple> list = transRecordService.countUnSettledTrans(start, end);
 
@@ -140,7 +196,8 @@ public class DailyRecap {
             for (Tuple t : list) {
                 QTransRecord q = QTransRecord.transRecord;
                 String dxs = t.get(q.issuerDxs);
-                //String cur = t.get(q.currency);
+                //交易币种
+                String cur = t.get(q.currency);
                 if (dxs == null) {
                     dxs = "ZX";
                 }
@@ -154,9 +211,10 @@ public class DailyRecap {
                 for (int i = 1; i <= numOfRecap; i++) {
                     long offset = (i - 1) * 1000L;
                     long limit = Math.min(cnt - offset, 1000L);
-                    List<TransRecord> transRecordList = transRecordService.getTrans(start, end, dxs, null, offset, limit);
+
+                    List<TransRecord> transRecordList = transRecordService.getTrans(start, end, dxs, offset, limit, cur);
                     //check refund, additional data
-                    compose(dxs, null, transRecordList, lines);
+                    compose(dxs, cur, transRecordList, lines, currencyConfigs);
                     transRecordService.updateTrans(transRecordList);
                 }
             }
@@ -167,7 +225,7 @@ public class DailyRecap {
                     + LocalTime.now().format(DateTimeFormatter.ofPattern("HHmmss"));
 
             try {
-                String dir = System.getProperty("user.dir");
+                String dir = ProgramEnvConstant.baseDir;
 
                 FileUtils.writeLines(new File(dir + File.separator + "OUT" + File.separator + filename), StandardCharsets.US_ASCII.displayName(), lines);
                 FileUtils.writeLines(new File(dir + File.separator + "OUT" + File.separator + filename + ".SENT"), Collections.EMPTY_LIST);
@@ -185,66 +243,8 @@ public class DailyRecap {
         }
     }
 
-    @Scheduled(cron = "0 0 */8 * * ?")
-    public void consume() {
-        log.info("【下载对账文件】");
-        List<String> files = SftpUtil.readDir(host, port, "DCOUT" + username, null, pri, pub, null, "./");
 
-        String dir = System.getProperty("user.dir");
-        List<String> exists = null;
-        Path path = Paths.get(dir, "INT");
-        Path subDir = path.resolve("load2db");
-        try {
-            File file = path.toFile();
-            if (!file.exists()) {
-                file.mkdirs();
-            }
-
-            if (!subDir.toFile().exists()) {
-                subDir.toFile().mkdirs();
-            }
-            exists = Streams.concat(Files.list(path), Files.list(subDir))
-                    .map(Path::toFile)
-                    .filter(File::isFile)
-                    .map(File::getName)
-                    .collect(Collectors.toList());
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        if (files != null) {
-            List<String> finalExists = exists;
-            String outputDir = Paths.get(dir, "INT").toFile().getName();
-            List<String> filesToDownload = files.stream()
-                    .filter(n -> !finalExists.contains(n))
-                    .collect(Collectors.toList());
-            if (!filesToDownload.isEmpty()) {
-                log.info("下载文件：{}", filesToDownload);
-                SftpUtil.download(host, port, "DCOUT" + username, null, pri, pub, null, filesToDownload, outputDir);
-            }
-
-            //处理文件
-            try {
-                Files.list(path)
-                        .map(Path::toFile)
-                        .filter(File::isFile)
-                        .map(File::getName)
-                        .filter(f -> f.contains("ACQHO") || f.contains("DFFHO"))
-                        .collect(Collectors.toList())
-                        .forEach(f -> {
-                            try {
-                                settlementService.loadFile(path, f);
-                            } catch (IOException e) {
-                                log.error("", e);
-                            }
-                        });
-            } catch (IOException e) {
-                log.error("", e);
-            }
-        }
-    }
-
-    private void compose(String dxs, String cur, List<TransRecord> records, List<String> lines) {
+    private void compose(String dxs, String cur, List<TransRecord> records, List<String> lines, List<CurrencyConfig> currencyConfigs) {
         NumberFormat nf = NumberFormat.getInstance();
         nf.setMaximumFractionDigits(2);
         nf.setMaximumIntegerDigits(13);
@@ -257,10 +257,20 @@ public class DailyRecap {
 
         String rcpdt = LocalDate.now().format(DateTimeFormatter.ofPattern("ddMMyy"));
         Recap.RecapHeader recapHeader = new Recap.RecapHeader();
-        //String currency = Currency.curD.get(cur);
+        String currency = Currency.curD.get(cur);
+        Optional<CurrencyConfig> optional = currencyConfigs.stream().filter(e -> currency.equals(e.getTransCurrency())).findFirst();
+        Optional<CurrencyConfig> defaultCurrency = currencyConfigs.stream().filter(e -> e.getDefaultSettlementCurrency() != null && e.getDefaultSettlementCurrency() == 1).findFirst();
+        String settlementCurrency;
+        if (optional.isPresent()) {
+            settlementCurrency = optional.get().getSettlementCurrency();
+        } else if (defaultCurrency.isPresent()) {
+            settlementCurrency = defaultCurrency.get().getSettlementCurrency();
+        } else {
+            settlementCurrency = settleCur;
+        }
         recapHeader.setSFTER(dxsCode);
         recapHeader.setDFTER(dxs);
-        recapHeader.setCURKY(settleCur);
+        recapHeader.setCURKY(settlementCurrency);
         recapHeader.setRCPDT(rcpdt);
 
         Integer recapNo = transRecordService.getRecapNo(recapHeader.getSFTER(), recapHeader.getDFTER());
@@ -343,7 +353,7 @@ public class DailyRecap {
             }
 
             List<TransRecord> oneBatch = records.subList(from, end);
-            List<Recap.ChargeDetail> chargeDetails = composeDetail(oneBatch, batchHeader, batchTrailer, nf);
+            List<Recap.ChargeDetail> chargeDetails = composeDetail(oneBatch, batchHeader, batchTrailer, nf, recapHeader.getCURKY());
 
             countOfCredit += Integer.parseInt(batchTrailer.getBTNCR());
             amountOfCredit = DoubleUtils.sum(amountOfCredit, Double.parseDouble(batchTrailer.getBTACR()));
@@ -364,7 +374,7 @@ public class DailyRecap {
         return list;
     }
 
-    private List<Recap.ChargeDetail> composeDetail(List<TransRecord> oneBatch, Recap.BatchHeader batchHeader, Recap.BatchTrailer batchTrailer, NumberFormat nf) {
+    private List<Recap.ChargeDetail> composeDetail(List<TransRecord> oneBatch, Recap.BatchHeader batchHeader, Recap.BatchTrailer batchTrailer, NumberFormat nf, @NotBlank String settlementCurrency) {
         List<Recap.ChargeDetail> chargeDetails = new ArrayList<>();
 
         int countOfCredit = 0;
@@ -379,12 +389,16 @@ public class DailyRecap {
             String transCurr = Currency.curD.get(e.getCurrency());
 
             Double amountInSettleCurr;
-            if (!transCurr.equals(settleCur)) {
+            if (!transCurr.equals(settlementCurrency)) {
                 //汇率
-                FxRate rate = rateHashMap.get(transCurr + "-" + settleCur);
+                FxRate rate = rateHashMap.get(transCurr + "-" + settlementCurrency);
                 if (rate == null) {
-                    throw new RuntimeException("缺少汇率" + transCurr + "-" + settleCur);
+                    rate = settlementService.loadRate(transCurr, settlementCurrency);
                 }
+                if (rate == null) {
+                    throw new RuntimeException("缺少汇率" + transCurr + "-" + settlementCurrency);
+                }
+                rateHashMap.put(transCurr + "-" + settlementCurrency, rate);
                 //汇率溢价
                 Double premium = rate.getPremium();
                 if (premium == null || premium > 0.05 || premium < -0.05) {
@@ -402,7 +416,11 @@ public class DailyRecap {
             detail.setDFTER(batchHeader.getDFTER());
             detail.setBATCH(batchHeader.getBATCH());
             detail.setSEQNO(String.format("%03d", i));
-            detail.setACCT(e.getCardNo());
+            if (!StringUtils.isNumeric(e.getCardNo())) {
+                detail.setACCT(Crypto.decrypt(e.getCardNo()));
+            } else {
+                detail.setACCT(e.getCardNo());
+            }
             detail.setCAMTR(nf.format(amountInSettleCurr));
             detail.setCHGDT(e.getTransactionTime().substring(0, 6));
             detail.setDATYP("TS");

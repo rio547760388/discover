@@ -4,17 +4,17 @@ discover:
   dxs_code: "D6"
   #Indicates the country in which the  acquirer of the charge detail is located per ISO Standard 3166
   aqgeo: "156"
-  dRate: "1.00"
+  dRate: "0"
   settleCur: "USD"
-  env: "CRT"
+  env: "PRD"
   generator:
     pre: 2
   exchange: exchange.iso8583
   queue: discover1
   scheduler: true
   sftp:
-    host: 192.168.200.236
-    port: 10022
+    host: 199.38.157.115
+    port: 22
     username: "D6"
   zmk:
     component1: C8BF16523D9107949ED5EF29942AF892
@@ -26,28 +26,25 @@ discover:
     zmkCheckValue: 40546B
 iso8583:
   message:
-    host: 192.168.200.209
+    host: 10.13.4.4
     port: 5672
-    username: ENC(xipsc1PKbCOVwLRcmrTz0x1dHqSeqxeF)
-    password: ENC(qEM3WD/q7kTvQujFHSRg0i5TbUZmz6XW)
-    virtualHost: /pacypay/uat
+    username: ENC(ZnmaDRoBCh6EGGgLaCb6eg==)
+    password: ENC(4JQ6GhdCM5RoY9V8Smh1t7kzGlzXlFVj)
+    virtualHost: /discover
     size: 10
   connection:
     enabled: true
     servers:
-      - host: 192.168.200.236
-        port: 13344
-      - host: 192.168.200.236
-        port: 13345
-      - host: 192.168.200.230
-        port: 13344
-      - host: 192.168.200.230
-        port: 13345
+      - host: 199.38.157.21
+        port: 3344
+      - host: 199.38.157.41
+        port: 3344
+    max: 20
 spring:
   datasource:
-    url: jdbc:mysql://192.168.200.110:8010/discovertestdb?serverTimezone=Asia/Shanghai&useSSL=false
-    username: discovertest
-    password: FmkY+JXUdT0PNCaG
+    url: jdbc:mysql://10.16.0.10:3306/discoverdb?serverTimezone=UTC&useSSL=false
+    username: ENC(98G9y9UpSOz9eKljuslssg2JiXDDxJgjzNfuLFUaTx/zysHb+1Yf6Q==)
+    password: ENC(4oM/4ws15gXtvwrkT+OQUEs5fLRfeNl/LHRsod6lOl8=)
     hikari:
       minimun-idle: 5
       idle-timeout: 60000
@@ -60,13 +57,13 @@ spring:
     properties.hibernate.dialect: org.hibernate.dialect.MySQLDialect
   redis:
     database: 10
-    host: 192.168.200.225
-    port: 6399
-    password: goopay
+    host: 10.13.4.4
+    port: 6379
+    password: ENC(6w4bsveWEfvJp+vpMcKES6lwQX4qEeb4)
 
 jasypt:
   encryptor:
-    password: b38d9d8357d04f0e
+    password: s8z9Mbo63ly5ckfz
 
 warn:
-  receiver: yong.wang@onerway.com
+  receiver: jinzhu.tian@pacypay.com,hao.hong@pacypay.com,zhengming.chen@onerway.com,xiaorong.zhan@onerway.com,jiaren.yan@onerway.com

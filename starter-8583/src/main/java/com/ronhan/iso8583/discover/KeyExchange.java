@@ -19,10 +19,10 @@ import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 
-import javax.crypto.SecretKey;
-import javax.crypto.SecretKeyFactory;
+import javax.crypto.*;
 import javax.crypto.spec.SecretKeySpec;
 import java.net.InetSocketAddress;
+import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
@@ -95,11 +95,42 @@ public class KeyExchange {
                 if (rLock.tryLock(5, 60, TimeUnit.SECONDS)) {
                     cache = redisson.getBucket(KEY_VALID_CACHE).get();
                     if (cache == null || cache.toString().equals("false")) {
-                        if (exchangeZPK(zmk)) {
+                        if (exchangeZPK(zmk, null, null)) {
                             redisson.getBucket(KEY_VALID_CACHE).set(true);
                         }
                     }
                 }
+            } catch (Exception e) {
+                e.printStackTrace();
+                log.error("初始化密钥失败");
+            } finally {
+                rLock.unlock();
+            }
+
+        }
+    }
+
+    public void update(String stan1, String stan2) throws DecoderException, InvalidKeySpecException, NoSuchAlgorithmException {
+        String zmk = verifyZMK();
+
+        redisson.getBucket(KEY_VALID_CACHE).set(false);
+
+        Object cache = redisson.getBucket(KEY_VALID_CACHE).get();
+
+        if (cache == null || cache.toString().equals("false")) {
+
+            RLock rLock = redisson.getLock(LOCK);
+            try {
+                if (rLock.tryLock(5, 60, TimeUnit.SECONDS)) {
+                    cache = redisson.getBucket(KEY_VALID_CACHE).get();
+                    if (cache == null || cache.toString().equals("false")) {
+                        if (exchangeZPK(zmk, stan1, stan2)) {
+                            redisson.getBucket(KEY_VALID_CACHE).set(true);
+                        }
+                    }
+                }
+
+                activate(stan2);
             } catch (Exception e) {
                 e.printStackTrace();
                 log.error("初始化密钥失败");
@@ -178,7 +209,7 @@ public class KeyExchange {
         return zpk;
     }
 
-    private boolean exchangeZPK(String zmk) throws NoSuchAlgorithmException, DecoderException, InvalidKeySpecException {
+    private boolean exchangeZPK(String zmk, String stan1, String stan2) throws NoSuchAlgorithmException, DecoderException, InvalidKeySpecException {
         String zpk = genZPK(zmk);
 
         SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance("DESede");
@@ -190,10 +221,23 @@ public class KeyExchange {
 
         String cv = Hex.encodeHexString(enc, false).substring(0, 4);
 
-        return send(zpk, cv);
+        //encrypt ZPK
+        KeySpec zmkKs = new SecretKeySpec(Hex.decodeHex(zmk + zmk.substring(0, 16)), "DESede");
+        SecretKey zmkKey = secretKeyFactory.generateSecret(zmkKs);
+        Cipher cipher = null;
+        String encryptedZPK = null;
+        try {
+            cipher = Cipher.getInstance("DESede/ECB/NoPadding");
+            cipher.init(Cipher.ENCRYPT_MODE, zmkKey);
+            encryptedZPK = Hex.encodeHexString(cipher.doFinal(Hex.decodeHex(zpk)), false);
+        } catch (NoSuchPaddingException | InvalidKeyException | IllegalBlockSizeException | BadPaddingException e) {
+            e.printStackTrace();
+        }
+
+        return send(encryptedZPK, cv, stan1, stan2);
     }
 
-    private boolean send(String zpk, String cv) {
+    private boolean send(String zpk, String cv, String stan1, String stan2) {
         CountDownLatch countDownLatch = new CountDownLatch(1);
 
         ChannelPool pool;
@@ -213,6 +257,9 @@ public class KeyExchange {
                 String d2 = DateUtils.format(DateUtils.yyMMddHHmmss, TimeZone.getDefault());
 
                 message.setField(7, IsoType.NUMERIC.value(d1, 10));
+                if (stan1 != null) {
+                    message.setField(11, IsoType.NUMERIC.value(stan1, 6));
+                }
                 message.setField(12, IsoType.NUMERIC.value(d2, 12));
                 message.setField(24, IsoType.NUMERIC.value(814, 3));
                 message.setField(93, IsoType.LLVAR.value(iic_dc));
@@ -228,6 +275,7 @@ public class KeyExchange {
                         if ("800".equals(isoMsg.getAt(39).getValue().toString())) {
                             //密钥发送成功
                             ai.getAndIncrement();
+                            redisson.getBucket(ZPK).set(zpk);
                         }
                         countDownLatch.countDown();
                     }
@@ -253,6 +301,9 @@ public class KeyExchange {
                     String d2 = DateUtils.format(DateUtils.yyMMddHHmmss, TimeZone.getDefault());
 
                     message.setField(7, IsoType.NUMERIC.value(d1, 10));
+                    if (stan2 != null) {
+                        message.setField(11, IsoType.NUMERIC.value(stan2, 6));
+                    }
                     message.setField(12, IsoType.NUMERIC.value(d2, 12));
                     message.setField(24, IsoType.NUMERIC.value(811, 3));
                     message.setField(93, IsoType.LLVAR.value(iic_dc));
@@ -266,19 +317,20 @@ public class KeyExchange {
                         IsoMessage isoMsg = l.get();
                         if (isoMsg.getType() == DiscoverMti.MTI1814 && "811".equals(isoMsg.getAt(24).getValue().toString())) {
                             if ("800".equals(isoMsg.getAt(39).getValue().toString())) {
-                                //密钥发送成功
+                                //密钥激活成功
                                 ai.getAndIncrement();
                             }
                             cdl.countDown();
                         }
                     });
 
+                    channel.get().writeAndFlush(message);
+
                     try {
                         if (!cdl.await(12, TimeUnit.SECONDS)) {
-                            log.error("密钥交换超时");
+                            log.error("密钥激活超时");
                         } else {
                             if (ai.get() == 2) {
-                                redisson.getBucket(ZPK).set(zpk);
                                 return true;
                             }
                         }
@@ -295,6 +347,70 @@ public class KeyExchange {
             pool.release(channel.get());
         }
 
+        return false;
+    }
+
+    private boolean activate(String stan2) {
+        CountDownLatch countDownLatch = new CountDownLatch(1);
+
+        ChannelPool pool;
+
+        AtomicReference<Channel> channel = new AtomicReference<>();
+
+        AtomicInteger ai = new AtomicInteger(0);
+
+        pool = poolMap.get(address.getAddresses().get(0));
+
+        pool.acquire().addListener(c -> {
+            if (c.isSuccess()) {
+                channel.set((Channel) c.get());
+                CountDownLatch cdl = new CountDownLatch(1);
+                IsoMessage message = mf.newMessage(DiscoverMti.MTI1804);
+                String d1 = DateUtils.format(DateUtils.MMddHHmmss, TimeZone.getTimeZone("UTC"));
+                String d2 = DateUtils.format(DateUtils.yyMMddHHmmss, TimeZone.getDefault());
+
+                message.setField(7, IsoType.NUMERIC.value(d1, 10));
+                if (stan2 != null) {
+                    message.setField(11, IsoType.NUMERIC.value(stan2, 6));
+                }
+                message.setField(12, IsoType.NUMERIC.value(d2, 12));
+                message.setField(24, IsoType.NUMERIC.value(811, 3));
+                message.setField(93, IsoType.LLVAR.value(iic_dc));
+                message.setField(94, IsoType.LLVAR.value(iic));
+
+                Iso8583Decoder decoder = channel.get()
+                        .pipeline()
+                        .get(Iso8583Decoder.class);
+                decoder.setMsgListener(l -> {
+                    IsoMessage isoMsg = l.get();
+                    if (isoMsg.getType() == DiscoverMti.MTI1814 && "811".equals(isoMsg.getAt(24).getValue().toString())) {
+                        if ("800".equals(isoMsg.getAt(39).getValue().toString())) {
+                            //密钥发送成功
+                            ai.getAndIncrement();
+                        }
+                        countDownLatch.countDown();
+                    }
+                });
+
+                channel.get().writeAndFlush(message);
+            } else {
+                log.error("获取channel失败");
+                countDownLatch.countDown();
+            }
+        });
+
+        try {
+            if (!countDownLatch.await(12, TimeUnit.SECONDS)) {
+                log.error("密钥激活超时");
+            } else {
+                if (ai.get() == 1) {
+                    return true;
+                }
+            }
+        } catch (InterruptedException ie) {
+        } finally {
+            pool.release(channel.get());
+        }
         return false;
     }
 }

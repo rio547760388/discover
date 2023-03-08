@@ -1,5 +1,6 @@
 package com.ronhan.iso8583.discover.sftp;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.apache.sshd.client.SshClient;
 import org.apache.sshd.client.session.ClientSession;
@@ -25,6 +26,7 @@ import java.util.stream.StreamSupport;
  * <p></p>
  * @since 2021/6/9
  **/
+@Slf4j
 public class SftpUtil {
 
     public final static SftpClient.OpenMode[] openModes = new SftpClient.OpenMode[]{SftpClient.OpenMode.Read, SftpClient.OpenMode.Create, SftpClient.OpenMode.Write};
@@ -61,7 +63,45 @@ public class SftpUtil {
             }
 
         } catch (IOException | NoSuchAlgorithmException | InvalidKeySpecException e) {
-            e.printStackTrace();
+            log.error("", e);
+        } finally {
+            sshClient.stop();
+            try {
+                sshClient.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        return null;
+    }
+
+    public static String read(String host, int port, String username, KeyStore.PrivateKeyEntry privateKeyEntry, String path) {
+        SshClient sshClient = SshClient.setUpDefaultClient();
+        sshClient.start();
+
+        try (ClientSession session = sshClient.connect(username, host, port)
+                .verify(5000)
+                .getClientSession()) {
+
+            if (privateKeyEntry != null) {
+                PrivateKey prik = privateKeyEntry.getPrivateKey();
+                PublicKey pubk = privateKeyEntry.getCertificate().getPublicKey();
+                KeyPair kp = new KeyPair(pubk, prik);
+                session.addPublicKeyIdentity(kp);
+            }
+
+            session.auth().verify(30000);
+
+            try (SftpClient sftpClient = SftpClientFactory.instance().createSftpClient(session)) {
+                try (InputStream is = sftpClient.read(path)) {
+
+                    return IOUtils.toString(is);
+                }
+            }
+
+        } catch (IOException e) {
+            log.error("", e);
         } finally {
             sshClient.stop();
             try {
@@ -108,7 +148,47 @@ public class SftpUtil {
             }
 
         } catch (IOException | NoSuchAlgorithmException | InvalidKeySpecException e) {
-            e.printStackTrace();
+            log.error("", e);
+        } finally {
+            sshClient.stop();
+            try {
+                sshClient.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+    }
+
+    public static void download(String host, int port, String username, KeyStore.PrivateKeyEntry privateKeyEntry, List<String> files, String outputDir) {
+        SshClient sshClient = SshClient.setUpDefaultClient();
+        sshClient.start();
+
+        try (ClientSession session = sshClient.connect(username, host, port)
+                .verify(5000)
+                .getClientSession()) {
+
+            if (privateKeyEntry != null) {
+                PrivateKey prik = privateKeyEntry.getPrivateKey();
+                PublicKey pubk = privateKeyEntry.getCertificate().getPublicKey();
+                KeyPair kp = new KeyPair(pubk, prik);
+                session.addPublicKeyIdentity(kp);
+            }
+
+            session.auth().verify(30000);
+
+            try (SftpClient sftpClient = SftpClientFactory.instance().createSftpClient(session)) {
+                files.forEach(name -> {
+                    try (InputStream is = sftpClient.read(name); OutputStream os = new FileOutputStream(new File(outputDir, name))) {
+                        IOUtils.copy(is, os);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                });
+            }
+
+        } catch (IOException e) {
+            log.error("", e);
         } finally {
             sshClient.stop();
             try {
@@ -152,7 +232,46 @@ public class SftpUtil {
             }
 
         } catch (IOException | NoSuchAlgorithmException | InvalidKeySpecException e) {
-            e.printStackTrace();
+            log.error("", e);
+        } finally {
+            sshClient.stop();
+            try {
+                sshClient.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        return null;
+    }
+
+    public static List<String> readDir(String host, int port, String username, KeyStore.PrivateKeyEntry privateKeyEntry, String path) {
+        SshClient sshClient = SshClient.setUpDefaultClient();
+        sshClient.start();
+
+        try (ClientSession session = sshClient.connect(username, host, port)
+                .verify(5000)
+                .getClientSession()) {
+
+            if (privateKeyEntry != null) {
+                PrivateKey prik = privateKeyEntry.getPrivateKey();
+                PublicKey pubk = privateKeyEntry.getCertificate().getPublicKey();
+                KeyPair kp = new KeyPair(pubk, prik);
+                session.addPublicKeyIdentity(kp);
+            }
+
+            session.auth().verify(30000);
+
+            try (SftpClient sftpClient = SftpClientFactory.instance().createSftpClient(session)) {
+                Iterable<SftpClient.DirEntry> des = sftpClient.readDir(path);
+                return StreamSupport.stream(des.spliterator(), false)
+                        .map(SftpClient.DirEntry::getFilename)
+                        .filter(s -> !".".equals(s) && !"..".equals(s))
+                        .collect(Collectors.toList());
+            }
+
+        } catch (IOException e) {
+            log.error("", e);
         } finally {
             sshClient.stop();
             try {
@@ -183,6 +302,63 @@ public class SftpUtil {
                 KeyFactory kf = KeyFactory.getInstance("RSA");
                 PrivateKey prik = kf.generatePrivate(peks);
                 PublicKey pubk = kf.generatePublic(xks);
+                KeyPair kp = new KeyPair(pubk, prik);
+                session.addPublicKeyIdentity(kp);
+            }
+
+            session.auth().verify(30000);
+
+            try (SftpClient sftpClient = SftpClientFactory.instance().createSftpClient(session)) {
+                try (FileChannel fc = sftpClient.openRemoteFileChannel(filename, openModes)) {
+                    ByteBuffer bf = ByteBuffer.allocate(1024);
+                    for (String str : content) {
+                        byte[] bytes = str.getBytes(StandardCharsets.US_ASCII);
+                        if (bytes.length > 1024) {
+                            int start = 0;
+                            while (start < bytes.length) {
+                                int len = Math.min(1024, bytes.length - start);
+                                bf.put(bytes, start, len);
+                                bf.flip();
+                                fc.write(bf);
+                                bf.clear();
+                                start += len;
+                            }
+
+                        } else {
+                            bf.put(bytes);
+                            bf.flip();
+                            fc.write(bf);
+                            bf.clear();
+                        }
+                        bf.put(System.lineSeparator().getBytes(StandardCharsets.US_ASCII));
+                        bf.flip();
+                        fc.write(bf);
+                        bf.clear();
+                    }
+                }
+            }
+
+        } finally {
+            sshClient.stop();
+            try {
+                sshClient.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public static void write(String host, int port, String username, KeyStore.PrivateKeyEntry privateKeyEntry, String filename, List<String> content) throws IOException, InvalidKeySpecException, NoSuchAlgorithmException {
+        SshClient sshClient = SshClient.setUpDefaultClient();
+        sshClient.start();
+
+        try (ClientSession session = sshClient.connect(username, host, port)
+                .verify(5000)
+                .getClientSession()) {
+
+            if (privateKeyEntry != null) {
+                PrivateKey prik = privateKeyEntry.getPrivateKey();
+                PublicKey pubk = privateKeyEntry.getCertificate().getPublicKey();
                 KeyPair kp = new KeyPair(pubk, prik);
                 session.addPublicKeyIdentity(kp);
             }

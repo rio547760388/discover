@@ -75,8 +75,14 @@ public class Response<T> {
          * no available channel
          */
         NOT_AVAILABLE(6, "not available"),
-
-        REPEAT_TRANS(7, "repeat transaction")
+        /**
+         * repeat transaction
+         */
+        REPEAT_TRANS(7, "repeat transaction"),
+        /**
+         * acceptorName + acceptorStreet + acceptorCity too long
+         */
+        ACCEPTOR_LOCATION_TOO_LONG(8, "total length of (acceptorName, acceptorStreet, acceptorCity) must be less than 80")
         ;
 
         public final int code;

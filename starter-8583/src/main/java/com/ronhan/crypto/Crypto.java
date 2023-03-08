@@ -1,12 +1,19 @@
 package com.ronhan.crypto;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 
 import javax.crypto.*;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.*;
+import java.security.cert.CertificateException;
+import java.security.spec.InvalidKeySpecException;
 import java.util.Base64;
+import java.util.Enumeration;
 
 /**
  * @author Mloong
@@ -32,6 +39,29 @@ public class Crypto {
     }
 
     static int blockSize = 128;
+
+    private static Key aesKey;
+
+    private static KeyStore.PrivateKeyEntry privateKeyEntry;
+
+    static {
+        try {
+            KeyStore ks = KeyStore.getInstance("PKCS12");
+            InputStream is = Thread.currentThread().getContextClassLoader().getResourceAsStream("dc.ks");
+            ks.load(is, "ronhan2021".toCharArray());
+
+            Enumeration<String> alias = ks.aliases();
+            for (; alias.hasMoreElements(); ) {
+                System.out.println(alias.nextElement());
+            }
+
+            aesKey = ks.getKey("mykey", "ronhan2021".toCharArray());
+
+            privateKeyEntry = (KeyStore.PrivateKeyEntry) ks.getEntry("dccert", new KeyStore.PasswordProtection("ronhan2021".toCharArray()));
+        } catch (KeyStoreException | CertificateException | IOException | NoSuchAlgorithmException | UnrecoverableEntryException e) {
+            e.printStackTrace();
+        }
+    }
 
     public static byte[] encrypt(byte[] bytes, Key key) {
         try {
@@ -60,6 +90,14 @@ public class Crypto {
         return null;
     }
 
+    public static String encrypt(String plain, Key key) {
+        return Base64.getEncoder().encodeToString(encrypt(plain.getBytes(StandardCharsets.UTF_8), key));
+    }
+
+    public static String encrypt(String plain) {
+        return encrypt(plain, aesKey);
+    }
+
     public static byte[] decrypt(byte[] bytes, Key key) {
         try {
             Cipher cipher = Cipher.getInstance(key.getAlgorithm());
@@ -84,6 +122,23 @@ public class Crypto {
             e.printStackTrace();
         }
         return null;
+    }
+
+    public static String decrypt(String secret, Key key) {
+        byte[] bytes = Base64.getDecoder().decode(secret);
+        return new String(decrypt(bytes, key), StandardCharsets.UTF_8);
+    }
+
+    public static String decrypt(String secret) {
+        return decrypt(secret, aesKey);
+    }
+
+    public static String decryptCardNo(String cardNo) {
+        if (!StringUtils.isNumeric(cardNo)) {
+            return decrypt(cardNo);
+        } else {
+            return cardNo;
+        }
     }
 
     public static SecretKey genSecretKey(int len, Algo algorithm) {
@@ -118,6 +173,40 @@ public class Crypto {
         String pub = Base64.getEncoder().encodeToString(publicKey.getEncoded());
         System.out.println(pub);
         return Pair.of(privateKey, publicKey);
+    }
+
+    public static SecretKey parseKey(String key) {
+        byte[] bytes = Base64.getDecoder().decode(key);
+        try {
+            SecretKeySpec keySpec = new SecretKeySpec(bytes, "AES");
+            return SecretKeyFactory.getInstance("AES").generateSecret(keySpec);
+        } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public static Key getKeyFromKeyStore() {
+        try {
+            KeyStore ks = KeyStore.getInstance("PKCS12");
+            InputStream is = Thread.currentThread().getContextClassLoader().getResourceAsStream("dc.ks");
+            ks.load(is, "ronhan2021".toCharArray());
+
+            Enumeration<String> alias = ks.aliases();
+            for (; alias.hasMoreElements(); ) {
+                System.out.println(alias.nextElement());
+            }
+
+            Key key = ks.getKey("mykey", "ronhan2021".toCharArray());
+            return key;
+        } catch (KeyStoreException | CertificateException | IOException | NoSuchAlgorithmException | UnrecoverableEntryException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public static KeyStore.PrivateKeyEntry getPrivateKeyEntry() {
+        return privateKeyEntry;
     }
 
 }

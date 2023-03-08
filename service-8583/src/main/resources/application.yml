@@ -18,10 +18,9 @@ spring:
 
 server:
   servlet:
-    context-path: /api
+    context-path: /
   port: 9900
 logging:
   file:
     name: log.txt
     max-history: 30
-    max-size: 30MB

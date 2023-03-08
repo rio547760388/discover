@@ -4,6 +4,7 @@ import com.querydsl.core.Tuple;
 import com.querydsl.core.types.Order;
 import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.jpa.impl.JPAQueryFactory;
+import com.ronhan.crypto.Crypto;
 import com.ronhan.iso8583.discover.sftp.files.Recap;
 import com.ronhan.pacypay.dao.BatchDetailRepository;
 import com.ronhan.pacypay.dao.BatchRecordRepository;
@@ -51,19 +52,19 @@ public class TransRecordServiceImpl implements TransRecordService {
     @Override
     public List<Tuple> countUnSettledTrans(LocalDateTime start, LocalDateTime end) {
         QTransRecord q = QTransRecord.transRecord;
-        return queryFactory.select(q.issuerDxs, q.count())
+        return queryFactory.select(q.issuerDxs, q.currency, q.count())
                 .from(q)
                 .where(q.importTime.goe(start)
                         .and(q.importTime.loe(end))
                         .and(q.transStatus.eq(1))
                         .and(q.settled.eq(0))
                         .and(q.captured.eq(1)))
-                .groupBy(q.issuerDxs)
+                .groupBy(q.issuerDxs, q.currency)
                 .fetch();
     }
 
     @Override
-    public List<TransRecord> getTrans(LocalDateTime start, LocalDateTime end, String dxs, String cur, long offset, long limit) {
+    public List<TransRecord> getTrans(LocalDateTime start, LocalDateTime end, String dxs, long offset, long limit, String... cur) {
         QTransRecord q = QTransRecord.transRecord;
 
         return queryFactory.select(q)
@@ -73,10 +74,10 @@ public class TransRecordServiceImpl implements TransRecordService {
                         .and(q.transStatus.eq(1))
                         .and(q.settled.eq(0))
                         .and(StringUtils.isEmpty(dxs) ? q.issuerDxs.isNull() : q.issuerDxs.eq(dxs))
-                        //.and(q.currency.eq(cur)))
+                        .and(q.currency.in(cur))
                 ).orderBy(new OrderSpecifier<>(Order.ASC, q.id))
-                .offset(offset)
-                .limit(limit)
+                .offset(0)
+                .limit(1000)
                 .fetch();
     }
 
@@ -176,7 +177,7 @@ public class TransRecordServiceImpl implements TransRecordService {
                         .recapNo(e.getRCPNO())
                         .batchNo(e.getBATCH())
                         .sequenceNo(e.getSEQNO())
-                        .cardNo(e.getACCT())
+                        .cardNo(Crypto.encrypt(e.getACCT()))
                         .chargeAmount(parseD(e.getCAMTR()))
                         .chargeDate(e.getCHGDT())
                         .dateType(e.getDATYP())

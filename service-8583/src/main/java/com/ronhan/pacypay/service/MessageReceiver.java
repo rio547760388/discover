@@ -39,6 +39,17 @@ public class MessageReceiver {
             )
     })
     public void receive(@Payload Message message) {
+        Map<Integer, String> map = message.getData();
+        if (map.containsKey(2)) {
+            map.put(2, map.get(2).substring(0, 6) + "****" + map.get(2).substring(map.get(2).length() - 4));
+        }
+        if (map.containsKey(14)) {
+            map.put(14, "****");
+        }
+        if (map.containsKey(40)) {
+            map.put(40, "***");
+        }
+
         log.info("message: {}", message);
 
         if ("1110".equals(message.getMti()) || "1430".equals(message.getMti())) {

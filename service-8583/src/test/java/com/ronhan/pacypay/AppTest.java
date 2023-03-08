@@ -1,6 +1,7 @@
 package com.ronhan.pacypay;
 
 
+import com.ronhan.crypto.Crypto;
 import com.ronhan.iso8583.DateUtils;
 import com.ronhan.iso8583.Message;
 import com.ronhan.iso8583.MessageUtil;
@@ -12,8 +13,13 @@ import com.ronhan.iso8583.discover.sftp.SftpUtil;
 import com.ronhan.pacypay.dao.ConfirmationEntityRepository;
 import com.ronhan.pacypay.parser.MessageParser;
 import com.ronhan.pacypay.parser.ParsedMessage;
+import com.ronhan.pacypay.pojo.FxRateQuery;
+import com.ronhan.pacypay.pojo.PageResult;
+import com.ronhan.pacypay.pojo.Response;
 import com.ronhan.pacypay.pojo.entity.ConfirmationEntity;
+import com.ronhan.pacypay.pojo.entity.FxRate;
 import com.ronhan.pacypay.scheduler.DailyRecap;
+import com.ronhan.pacypay.service.SettlementService;
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoType;
 import com.solab.iso8583.MessageFactory;
@@ -291,7 +297,7 @@ class AppTests {
     private String pri;
     @Test
     public void testSftp() {
-        List<String> s = SftpUtil.readDir(host, port, "DCINT"+username, null, pri, pub, null, ".");
+        List<String> s = SftpUtil.readDir(host, port, "DCINT"+username, Crypto.getPrivateKeyEntry(), ".");
         System.out.println(s);
     }
 
@@ -303,5 +309,16 @@ class AppTests {
         ConfirmationEntity ce = new ConfirmationEntity();
         ce.setFilename(filename);
         System.out.println(confirmationEntityRepository.count(Example.of(ce, ExampleMatcher.matching().withStringMatcher(ExampleMatcher.StringMatcher.EXACT))));
+    }
+
+    @Autowired
+    private SettlementService settlementService;
+
+    @Test
+    public void fxRates() {
+        FxRateQuery query = new FxRateQuery();
+        query.setPageNum(2);
+        PageResult<FxRate> res = settlementService.list(query);
+        System.out.println(res);
     }
 }

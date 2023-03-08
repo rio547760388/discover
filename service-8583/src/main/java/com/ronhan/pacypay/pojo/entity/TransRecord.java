@@ -29,7 +29,7 @@ public class TransRecord {
     /**
      * 卡号
      */
-    @Column(name = "CARDNO", length = 32)
+    @Column(name = "CARDNO", length = 64)
     private String cardNo;
 
     /**
@@ -47,13 +47,13 @@ public class TransRecord {
     /**
      * 卡过期月份
      */
-    @Column(name = "EXPIRY_MONTH", length = 2)
+    @Column(name = "EXPIRY_MONTH", length = 64)
     private String expiryMonth;
 
     /**
      * 卡过期年
      */
-    @Column(name = "EXPIRY_YEAR", length = 4)
+    @Column(name = "EXPIRY_YEAR", length = 64)
     private String expiryYear;
 
     /**

@@ -1,5 +1,8 @@
 package com.ronhan.pacypay.service;
 
+import com.ronhan.pacypay.pojo.FxRateQuery;
+import com.ronhan.pacypay.pojo.PageResult;
+import com.ronhan.pacypay.pojo.entity.CurrencyConfig;
 import com.ronhan.pacypay.pojo.entity.FxRate;
 import com.ronhan.pacypay.pojo.entity.RecapRecord;
 
@@ -39,4 +42,21 @@ public interface SettlementService {
      * @param rates
      */
     void saveRate(List<FxRate> rates);
+
+    /**
+     * 查询汇率
+     * @return
+     */
+    PageResult<FxRate> list(FxRateQuery query);
+
+    /**
+     * 发送解析的对账文件
+     */
+    void sendParsedFile();
+
+    /**
+     * 结算币种配置
+     * @return
+     */
+    List<CurrencyConfig> listCurrencyConfig();
 }

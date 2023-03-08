@@ -1,6 +1,8 @@
 package com.ronhan.pacypay.scheduler;
 
+import com.ronhan.crypto.Crypto;
 import com.ronhan.iso8583.discover.sftp.SftpUtil;
+import com.ronhan.pacypay.constants.ProgramEnvConstant;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.codec.binary.StringUtils;
@@ -44,12 +46,6 @@ public class RecapUploadImpl implements RecapUpload {
     @Value("${discover.sftp.username}")
     private String username;
 
-    @Value("${discover.sftp.pubKey}")
-    private String pub;
-
-    @Value("${discover.sftp.priKey}")
-    private String pri;
-
     @Autowired
     private JavaMailSender javaMailSender;
 
@@ -67,8 +63,8 @@ public class RecapUploadImpl implements RecapUpload {
     public void sendFile(String filename, List<String> content) {
         log.info("上传interchange file {}", filename);
         try {
-            SftpUtil.write(host, port, "DCINT" + username, null, pri, pub, null, filename, content);
-            SftpUtil.write(host, port, "DCINT" + username, null, pri, pub, null, filename + ".SENT", Collections.EMPTY_LIST);
+            SftpUtil.write(host, port, "DCINT" + username, Crypto.getPrivateKeyEntry(), filename, content);
+            SftpUtil.write(host, port, "DCINT" + username, Crypto.getPrivateKeyEntry(), filename + ".SENT", Collections.EMPTY_LIST);
 
             checkFileHash(filename);
         } catch (IOException | InvalidKeySpecException | NoSuchAlgorithmException e) {
@@ -97,9 +93,9 @@ public class RecapUploadImpl implements RecapUpload {
 
     private void checkFileHash(String filename) {
         try {
-            String dir = System.getProperty("user.dir");
+            String dir = ProgramEnvConstant.baseDir;
             String local = FileUtils.readFileToString(new File(dir + File.separator + "OUT" + File.separator + filename));
-            String remote = SftpUtil.read(host, port, "DCINT" + username, null, pri, pub, null, filename);
+            String remote = SftpUtil.read(host, port, "DCINT" + username, Crypto.getPrivateKeyEntry(), filename);
             if (!StringUtils.equals(checksum(local), checksum(remote))) {
                 log.info("{}文件与本地不一致", filename);
             }

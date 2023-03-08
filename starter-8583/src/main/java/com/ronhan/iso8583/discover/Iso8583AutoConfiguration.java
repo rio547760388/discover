@@ -114,7 +114,7 @@ public class Iso8583AutoConfiguration {
         return generator;
     }
 
-    @Bean(initMethod = "init")
+    @Bean()
     public KeyExchange keyExchange() {
         return new KeyExchange(com1, com2, com3, chkV1, chkV2, chkV3, zmkChkV);
     }

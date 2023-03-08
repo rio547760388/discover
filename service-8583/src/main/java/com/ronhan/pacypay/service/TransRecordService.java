@@ -38,7 +38,7 @@ public interface TransRecordService {
      * @param end
      * @return
      */
-    List<TransRecord> getTrans(LocalDateTime start, LocalDateTime end, String dxs, String cur, long offset, long limit);
+    List<TransRecord> getTrans(LocalDateTime start, LocalDateTime end, String dxs, long offset, long limit, String... cur);
 
     /**
      * updateTrans

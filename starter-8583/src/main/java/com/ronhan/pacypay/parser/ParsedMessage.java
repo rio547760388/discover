@@ -1,5 +1,6 @@
 package com.ronhan.pacypay.parser;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 
 /**
@@ -22,6 +23,7 @@ public class ParsedMessage {
 
     private String billingCurrency;
 
+    @JsonIgnore
     private String cardNo;
 
     private String transmissionTime;

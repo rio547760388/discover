@@ -24,22 +24,26 @@ public class Sftp<T> implements Closeable {
     private SshClient sshClient;
     private SftpClient sftpClient;
 
+    private final String host;
     private final int port;
     private final String username;
     private final String password;
     private final String priKey;
     private final String pubKey;
+    private final KeyStore.PrivateKeyEntry privateKeyEntry;
     private final String path;
 
-    private Sftp(String host, int port, String username, String password, String priKey, String pubKey, String path) {
+    private Sftp(String host, int port, String username, String password, String priKey, String pubKey, KeyStore.PrivateKeyEntry privateKeyEntry, String path) {
+        this.host = host;
         this.port = port;
         this.username = username;
         this.password = password;
         this.priKey = priKey;
         this.pubKey = pubKey;
+        this.privateKeyEntry = privateKeyEntry;
         this.path = path;
 
-        init(host, this.port, this.username, this.password, this.priKey, this.pubKey);
+        init();
     }
 
     /**
@@ -57,7 +61,7 @@ public class Sftp<T> implements Closeable {
         return sftpHandler.handle(sftpClient);
     }
 
-    private void init(String host, int port, String username, String password, String priKey, String pubKey) {
+    private void init() {
         sshClient = SshClient.setUpDefaultClient();
 
         sshClient.start();
@@ -70,12 +74,16 @@ public class Sftp<T> implements Closeable {
                 session.addPasswordIdentity(password);
             }
             if (priKey != null && pubKey != null) {
-
                 PKCS8EncodedKeySpec peks = new PKCS8EncodedKeySpec(Base64.getDecoder().decode(priKey));
                 X509EncodedKeySpec xks = new X509EncodedKeySpec(Base64.getDecoder().decode(pubKey));
                 KeyFactory kf = KeyFactory.getInstance("RSA");
                 PrivateKey prik = kf.generatePrivate(peks);
                 PublicKey pubk = kf.generatePublic(xks);
+                KeyPair kp = new KeyPair(pubk, prik);
+                session.addPublicKeyIdentity(kp);
+            } else if (privateKeyEntry != null) {
+                PrivateKey prik = privateKeyEntry.getPrivateKey();
+                PublicKey pubk = privateKeyEntry.getCertificate().getPublicKey();
                 KeyPair kp = new KeyPair(pubk, prik);
                 session.addPublicKeyIdentity(kp);
             }
@@ -132,6 +140,7 @@ public class Sftp<T> implements Closeable {
         private String password;
         private String priKey;
         private String pubKey;
+        private KeyStore.PrivateKeyEntry privateKeyEntry;
         private String path;
 
         private Builder() {
@@ -166,13 +175,18 @@ public class Sftp<T> implements Closeable {
             return this;
         }
 
+        public Builder privateKeyEntry(KeyStore.PrivateKeyEntry privateKeyEntry) {
+            this.privateKeyEntry = privateKeyEntry;
+            return this;
+        }
+
         public Builder path(String path) {
             this.path = path;
             return this;
         }
 
         public <T> Sftp<T> build() {
-            return new Sftp<T>(host, port, username, password, priKey, pubKey, path);
+            return new Sftp<T>(host, port, username, password, priKey, pubKey, privateKeyEntry, path);
         }
     }
 

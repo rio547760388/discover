@@ -2,26 +2,45 @@ package com.ronhan.pacypay.service.impl;
 
 import com.querydsl.core.types.Order;
 import com.querydsl.core.types.OrderSpecifier;
+import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
+import com.ronhan.crypto.Crypto;
 import com.ronhan.iso8583.discover.sftp.files.ConfirmationFile;
+import com.ronhan.pacypay.constants.ProgramEnvConstant;
 import com.ronhan.pacypay.dao.ConfirmationEntityRepository;
+import com.ronhan.pacypay.dao.CurrencyConfigRepository;
 import com.ronhan.pacypay.dao.FxRateRepository;
+import com.ronhan.pacypay.pojo.FxRateQuery;
+import com.ronhan.pacypay.pojo.PageResult;
 import com.ronhan.pacypay.pojo.entity.*;
 import com.ronhan.pacypay.service.SettlementService;
+import com.ronhan.pacypay.util.DcFileWriter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Example;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.mail.MessagingException;
+import javax.mail.internet.MimeMessage;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * @author Mloong
@@ -41,6 +60,18 @@ public class SettlementServiceImpl implements SettlementService {
 
     @Autowired
     private FxRateRepository rateRepository;
+
+    @Autowired
+    private JavaMailSender javaMailSender;
+
+    @Autowired
+    private CurrencyConfigRepository currencyConfigRepository;
+
+    @Value("${spring.mail.username:}")
+    private String account;
+
+    @Value("${spring.profiles.active}")
+    private String env;
 
     @Transactional(rollbackFor = Exception.class)
     @Override
@@ -64,6 +95,10 @@ public class SettlementServiceImpl implements SettlementService {
         if (filename.contains("ACQHO")) {
             ConfirmationFile cf = ConfirmationFile.parse(lines);
             saveCfFile(cf, filename);
+            parseFile(lines, filename);
+            load = true;
+        } else if (filename.contains("DFFHO")) {
+            parseFile(lines, filename);
             load = true;
         }
         //move file
@@ -103,6 +138,101 @@ public class SettlementServiceImpl implements SettlementService {
         rateRepository.saveAll(rates);
     }
 
+    @Override
+    public PageResult<FxRate> list(FxRateQuery query) {
+
+        QFxRate q = QFxRate.fxRate;
+
+        JPAQuery<FxRate> query1 = factory.select(q).from(q);
+        if (StringUtils.isNotBlank(query.getSellCurrency())) {
+            query1.where(q.sellCurrency.eq(query.getSellCurrency()));
+        }
+
+        if (StringUtils.isNotBlank(query.getBuyCurrency())) {
+            query1.where(q.buyCurrency.eq(query.getBuyCurrency()));
+        }
+
+        if (StringUtils.isNotBlank(query.getOptTimeStart())) {
+            query1.where(q.optTime.goe(LocalDateTime.parse(query.getOptTimeStart(), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))));
+        }
+
+        if (StringUtils.isNotBlank(query.getOptTimeEnd())) {
+            query1.where(q.optTime.loe(LocalDateTime.parse(query.getOptTimeEnd(), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))));
+        }
+
+        long total = query1.fetchCount();
+
+        if (query.getPageNum() < 1) {
+            query.setPageNum(1);
+        }
+
+        if (query.getPageSize() < 10) {
+            query.setPageSize(10);
+        }
+
+        long remainder = total % query.getPageSize();
+
+        long pages = remainder == 0 ? total / query.getPageSize() : total / query.getPageSize() + 1;
+
+        List<FxRate> list = query1.offset((query.getPageNum() - 1) * query.getPageSize())
+                .limit(query.getPageSize())
+                .orderBy(new OrderSpecifier<>(Order.DESC, q.id)).fetch();
+
+        PageResult<FxRate> pageResult = new PageResult<>(list, total, pages, query.getPageSize(), query.getPageNum());
+        return pageResult;
+    }
+
+    @Override
+    public void sendParsedFile() {
+        String dir = ProgramEnvConstant.baseDir;
+        Path path = Paths.get(dir, "parsedFile");
+        Path subDir = path.resolve("sent");
+        if (!subDir.toFile().exists()) {
+            subDir.toFile().mkdirs();
+        }
+
+        try {
+            List<File> files = Files.list(path)
+                    .map(Path::toFile)
+                    .filter(File::isFile)
+                    .collect(Collectors.toList());
+            if (!files.isEmpty()) {
+                //发送邮件
+                MimeMessage mimeMessage = javaMailSender.createMimeMessage();
+                MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true);
+                files.forEach(f -> {
+                    try {
+                        helper.addAttachment(f.getName(), f);
+                    } catch (MessagingException e) {
+                        e.printStackTrace();
+                    }
+                });
+                helper.setFrom(account);
+                //helper.setTo(receiver);
+                helper.setSubject("Discover对账文件");
+                helper.setText("环境：" + env, false);
+                javaMailSender.send(mimeMessage);
+                //log.info("邮件发送成功{}", Arrays.deepToString(receiver));
+
+                //文件归档
+                files.forEach(f -> {
+                    try {
+                        Files.move(f.toPath(), subDir.resolve(f.getName()));
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                });
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public List<CurrencyConfig> listCurrencyConfig() {
+        return currencyConfigRepository.findAll();
+    }
+
     private void saveCfFile(ConfirmationFile cf, String filename) {
         List<ConfirmationEntity> ceList = new ArrayList<>();
         ConfirmationFile.FileHeaderRecord fhr = cf.getFileHeaderRecord();
@@ -119,6 +249,10 @@ public class SettlementServiceImpl implements SettlementService {
             recap.getSettlementBatchPackages().forEach(batch -> {
                 ConfirmationFile.BatchHeaderRecord bhr = batch.getBatchHeaderRecord();
                 batch.getChargeRecords().forEach(charge -> {
+                    String cardNo = trim(charge.getCardNumber());
+                    if (StringUtils.isNotEmpty(cardNo)) {
+                        cardNo = Crypto.encrypt(cardNo);
+                    }
                     ConfirmationEntity ce = ConfirmationEntity.builder()
                             .acquirerDXS_IIC(trim(fhr.getDxsCode()))
                             .acquirerISO_IIC(trim(fhr.getIIC()))
@@ -137,7 +271,7 @@ public class SettlementServiceImpl implements SettlementService {
                             .batchNumber(trim(bhr.getBatchNumber()))
                             .type(trim(charge.getType()))
                             .sequenceNum(trim(charge.getSequenceNumber()))
-                            .cardNum(trim(charge.getCardNumber()))
+                            .cardNum(cardNo)
                             .chargeDate(trim(charge.getChargeDate()))
                             .chargeType(trim(charge.getChargeType()))
                             .typeOfCharge(trim(charge.getTypeOfCharge()))
@@ -276,5 +410,28 @@ public class SettlementServiceImpl implements SettlementService {
 
     private String trim(String str) {
         return StringUtils.trim(str);
+    }
+
+    private void parseFile(List<String> content, String filename) {
+        String dir = ProgramEnvConstant.baseDir;
+        Path path = Paths.get(dir, "parsedFile");
+
+        File file = path.toFile();
+        if (!file.exists()) {
+            file.mkdirs();
+        }
+
+
+        File parsedFile = path.resolve(filename + ".csv").toFile();
+        try (FileOutputStream fos = new FileOutputStream(parsedFile)) {
+            if (filename.contains("ACQHO")) {
+                DcFileWriter.writeInterchangeConfirmation(content, fos);
+            } else if (filename.contains("DFFHO")) {
+                DcFileWriter.writeDisputeAndFee(content, fos);
+            }
+        } catch (Exception fnfe) {
+            fnfe.printStackTrace();
+        }
+
     }
 }

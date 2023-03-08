@@ -1,8 +1,11 @@
 package com.ronhan.pacypay.endpoint;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson.JSONPath;
 import com.ronhan.Country;
 import com.ronhan.Currency;
+import com.ronhan.crypto.Crypto;
 import com.ronhan.iso8583.DateUtils;
 import com.ronhan.iso8583.Message;
 import com.ronhan.iso8583.MessageUtil;
@@ -88,11 +91,23 @@ public class Main {
 
     @PostMapping("auth")
     public Response<ParsedMessage> auth(@Valid @RequestBody AuthRequest auth) {
-        log.info("auth request: {}", JSON.toJSONString(auth));
+        JSONObject json = (JSONObject) JSON.toJSON(auth);
+        String cardNo = auth.getCardNo();
+        cardNo = cardNo.substring(0, 6) + "****" + cardNo.substring(cardNo.length() - 4);
+        JSONPath.set(json, "$.cardNo", cardNo);
+        JSONPath.set(json, "$.expiryMonth", "**");
+        JSONPath.set(json, "$.expiryYear", "****");
+        JSONPath.set(json, "$.cvv", "***");
+
+        log.info("auth request: {}", json.toJSONString());
         //convert
         auth.setAcceptorCountry(Country.convertToNum(auth.getAcceptorCountry()));
         auth.setOriginatorCountry(Country.convertToNum(auth.getOriginatorCountry()));
         auth.setCurrency(Currency.alphaToNum(auth.getCurrency()));
+
+        if (auth.toAcLocation().length() > 99) {
+            return Response.error(Response.ErrorCode.ACCEPTOR_LOCATION_TOO_LONG, null);
+        }
 
         if (transRecordService.countTransByUniqueId(auth.getUniqueId()) > 0) {
             return Response.error(Response.ErrorCode.REPEAT_TRANS, null);
@@ -303,12 +318,12 @@ public class Main {
         IsoMessage message = mf.newMessage(DiscoverMti.MTI1420);
         String d1 = DateUtils.format(DateUtils.MMddHHmmss, TimeZone.getTimeZone("UTC"));
 
-        message.setField(2, IsoType.LLVAR.value(original.getCardNo()));
+        message.setField(2, IsoType.LLVAR.value(Crypto.decryptCardNo(original.getCardNo())));
         message.setField(3, IsoType.ALPHA.value("200000", 6));
         message.setField(4, IsoType.NUMERIC.value(Currency.format(refund.getAmount(), refund.getCurrency()), 12));
         message.setField(7, IsoType.NUMERIC.value(d1, 10));
         message.setField(12, IsoType.NUMERIC.value(time, 12));
-        message.setField(24, IsoType.NUMERIC.value("1".equals(refund.getFullRefund()) ? 400 : 401, 3));
+        message.setField(24, IsoType.NUMERIC.value(Double.parseDouble(refund.getAmount()) == original.getAmount() ? 400 : 401, 3));
         message.setField(26, IsoType.NUMERIC.value(original.getMcc(), 4));
         message.setField(32, IsoType.LLVAR.value(iic));
         message.setField(33, IsoType.LLVAR.value(iic));
@@ -327,11 +342,11 @@ public class Main {
     private TransRecord toTransRecord(AuthRequest request) {
         TransRecord tr = new TransRecord();
         tr.setType(1);
-        tr.setCardNo(request.getCardNo());
+        tr.setCardNo(Crypto.encrypt(request.getCardNo()));
         tr.setAmount(Double.parseDouble(request.getAmount()));
         tr.setCurrency(request.getCurrency());
-        tr.setExpiryMonth(request.getExpiryMonth());
-        tr.setExpiryYear(request.getExpiryYear());
+        tr.setExpiryMonth(Crypto.encrypt(request.getExpiryMonth()));
+        tr.setExpiryYear(Crypto.encrypt(request.getExpiryYear()));
         tr.setMcc(request.getMcc());
         tr.setAcceptorId(request.getAcceptorId());
         tr.setAcceptorName(request.getAcceptorName());
@@ -501,6 +516,7 @@ public class Main {
             Future<Channel> future = pool.acquire();
             try {
                 Channel channel = future.get(3, TimeUnit.SECONDS);
+                TimeUnit.SECONDS.sleep(2);
                 if (channel.isActive()) {
                     return Pair.of(pool, channel);
                 } else {
